@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4
+name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4-
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - main
   workflow_dispatch:
 
-# This ensures we publish ONLY the Maintenance.WebAPI project (not the whole solution)
+
 env:
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
 
@@ -75,6 +75,7 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: jg-maintenance-webapi-lab4
+          app-name: jg-maintenance-webapi-lab4-
           slot-name: Production
           package: .
+
