@@ -1,7 +1,4 @@
-# ============================================================
-# CI/CD Pipeline: Build & Deploy Maintenance.WebAPI to Azure
-# Target Azure App Service: jg-maintenance-webapi-lab4-
-# ============================================================
+
 
 name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4-
 
@@ -9,11 +6,14 @@ on:
   push:
     branches:
       - main
+
   workflow_dispatch:
 
 env:
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
   PUBLISH_DIR: publish
+
+  PACKAGE_ZIP: maintenance-webapi.zip
 
 jobs:
   build:
@@ -21,53 +21,51 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # 1) Pull repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2) Install .NET 8 SDK
-      - name: Set up .NET
+      - name: Set up .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
-      # 3) Restore ONLY the API project
       - name: Restore dependencies
         run: dotnet restore "${{ env.PROJECT_PATH }}"
 
-      # 4) Build ONLY the API project
       - name: Build (Release)
         run: dotnet build "${{ env.PROJECT_PATH }}" --configuration Release --no-restore
 
-      # 5) Publish ONLY the API project to ./publish
       - name: Publish
         run: dotnet publish "${{ env.PROJECT_PATH }}" --configuration Release --no-build -o "${{ env.PUBLISH_DIR }}"
+        
+      - name: Zip publish output
+        shell: pwsh
+        run: |
+          if (Test-Path "${{ env.PACKAGE_ZIP }}") { Remove-Item "${{ env.PACKAGE_ZIP }}" -Force }
+          Compress-Archive -Path "${{ env.PUBLISH_DIR }}\*" -DestinationPath "${{ env.PACKAGE_ZIP }}"
 
-      # 6) Upload published output for deploy job
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: maintenance-webapi
-          path: ${{ env.PUBLISH_DIR }}
+          name: maintenance-webapi-package
+          path: ${{ env.PACKAGE_ZIP }}
 
   deploy:
     name: Deploy to Azure App Service
     runs-on: windows-latest
     needs: build
-
+    
     permissions:
       id-token: write
       contents: read
 
     steps:
-      # 1) Download artifact
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: maintenance-webapi
+          name: maintenance-webapi-package
           path: .
 
-      # 2) Login to Azure (OIDC)
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -75,10 +73,9 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_21017111BCB04619ADBDA630999991E9 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_687BE5751C394407B407D3413BBCD01A }}
 
-      # 3) Deploy to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: "jg-maintenance-webapi-lab4-"
           slot-name: "Production"
-          package: .
+          package: "./${{ env.PACKAGE_ZIP }}"
