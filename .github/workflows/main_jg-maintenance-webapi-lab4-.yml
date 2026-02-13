@@ -1,7 +1,11 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# ==========================================
+# CI/CD Pipeline: Maintenance.WebAPI -> Azure App Service
+# - Builds ONLY Maintenance.WebAPI
+# - Publishes to a clean folder
+# - Deploys ONLY the published output to Azure
+# ==========================================
 
-name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4-
+name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenancewebapi-lab4-
 
 on:
   push:
@@ -9,61 +13,62 @@ on:
       - main
   workflow_dispatch:
 
-
 env:
+  # Path to the API project you want to deploy
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
+
+  # Folder used for publish output (artifact)
+  PUBLISH_DIR: publish
 
 jobs:
   build:
     runs-on: windows-latest
-    permissions:
-      contents: read # Required for actions/checkout
 
     steps:
-      # 1) Pull code from GitHub
+      # 1) Pull your repository code into the GitHub runner
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2) Install .NET SDK
-      - name: Set up .NET
+      # 2) Install the correct .NET SDK version (your Azure runtime shows .NET 8)
+      - name: Set up .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
-      # 3) Restore dependencies for ONLY Maintenance.WebAPI
+      # 3) Restore NuGet packages for ONLY Maintenance.WebAPI
       - name: Restore dependencies
         run: dotnet restore ${{ env.PROJECT_PATH }}
 
-      # 4) Build ONLY Maintenance.WebAPI
+      # 4) Build ONLY Maintenance.WebAPI (Release mode)
       - name: Build
-        run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+        run: dotnet build ${{ env.PROJECT_PATH }} -c Release --no-restore
 
-      # 5) Publish ONLY Maintenance.WebAPI into a folder for deployment
+      # 5) Publish ONLY Maintenance.WebAPI to a clean folder
       - name: Publish
-        run: dotnet publish ${{ env.PROJECT_PATH }} --configuration Release --no-build -o "${{ env.DOTNET_ROOT }}/myapp"
+        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release --no-build -o ${{ env.PUBLISH_DIR }}
 
-      # 6) Upload the published output as an artifact for the deploy job
-      - name: Upload artifact for deployment job
+      # 6) Upload the published output as an artifact for deployment
+      - name: Upload published artifact
         uses: actions/upload-artifact@v4
         with:
           name: maintenance-webapi
-          path: ${{ env.DOTNET_ROOT }}/myapp
+          path: ${{ env.PUBLISH_DIR }}
 
   deploy:
     runs-on: windows-latest
     needs: build
-    permissions:
-      id-token: write  # Required for OIDC login to Azure
-      contents: read   # Required for actions/checkout
 
     steps:
-      # 1) Download the artifact created in the build job
-      - name: Download artifact from build job
+      # 1) Download the artifact created in build job into the same folder name
+      - name: Download published artifact
         uses: actions/download-artifact@v4
         with:
           name: maintenance-webapi
+          path: ${{ env.PUBLISH_DIR }}
 
-      # 2) Login to Azure using OIDC secrets (these MUST match your GitHub repo secrets)
+      # 2) Login to Azure (OIDC)
+      # IMPORTANT: Your repo secrets are NOT generic names.
+      # Replace the 3 secret names below with the EXACT ones you see in GitHub Secrets.
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -71,11 +76,10 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_21017111BCB04619ADBDA630999991E9 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_687BE5751C394407B407D3413BBCD01A }}
 
-      # 3) Deploy the published output to the Azure Web App
+      # 3) Deploy ONLY the published folder to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: jg-maintenance-webapi-lab4-
+          app-name: jg-maintenancewebapi-lab4-
           slot-name: Production
-          package: .
-
+          package: ${{ env.PUBLISH_DIR }}
