@@ -1,66 +1,50 @@
 # ============================================================
 # CI/CD Pipeline: Build & Deploy Maintenance.WebAPI to Azure
-# Target App Service: jg-maintenance-webapi-lab4-
-#
-# What this workflow does:
-# 1) Checks out your repo
-# 2) Restores, builds, and publishes ONLY the Maintenance.WebAPI project
-# 3) Uploads the published output as an artifact
-# 4) Logs into Azure using OIDC (no password)
-# 5) Deploys the artifact to Azure App Service
+# Target Azure App Service: jg-maintenance-webapi-lab4-
 # ============================================================
 
 name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4-
 
-# Trigger this workflow whenever code is pushed to main,
-# or when you manually run it from the Actions tab.
 on:
   push:
     branches:
       - main
   workflow_dispatch:
 
-# Global variables used in multiple steps
 env:
-  # IMPORTANT: path to your WebAPI project file relative to repo root
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
-  # Folder where publish output will be placed on the GitHub runner
-  PUBLISH_DIR: ${{ env.DOTNET_ROOT }}/publish
+  PUBLISH_DIR: publish
 
 jobs:
   build:
     name: Build & Publish Maintenance.WebAPI
     runs-on: windows-latest
 
-    # Required so actions/checkout can read your repo
-    permissions:
-      contents: read
-
     steps:
-      # 1) Download/checkout the repository code into the runner
+      # 1) Pull repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2) Install .NET SDK on the runner
-      - name: Set up .NET 8 SDK
+      # 2) Install .NET 8 SDK
+      - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
-      # 3) Restore NuGet packages ONLY for Maintenance.WebAPI
+      # 3) Restore ONLY the API project
       - name: Restore dependencies
         run: dotnet restore "${{ env.PROJECT_PATH }}"
 
-      # 4) Build ONLY Maintenance.WebAPI (Release mode)
-      - name: Build
+      # 4) Build ONLY the API project
+      - name: Build (Release)
         run: dotnet build "${{ env.PROJECT_PATH }}" --configuration Release --no-restore
 
-      # 5) Publish ONLY Maintenance.WebAPI into a deployable folder
+      # 5) Publish ONLY the API project to ./publish
       - name: Publish
         run: dotnet publish "${{ env.PROJECT_PATH }}" --configuration Release --no-build -o "${{ env.PUBLISH_DIR }}"
 
-      # 6) Upload the published files as an artifact for the deploy job
-      - name: Upload build artifact
+      # 6) Upload published output for deploy job
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: maintenance-webapi
@@ -71,34 +55,30 @@ jobs:
     runs-on: windows-latest
     needs: build
 
-    # IMPORTANT for OIDC login:
-    # id-token: write is REQUIRED, otherwise you get ACTIONS_ID_TOKEN_REQUEST_URL errors
     permissions:
       id-token: write
       contents: read
 
     steps:
-      # 1) Download the artifact created in the build job
+      # 1) Download artifact
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: maintenance-webapi
           path: .
 
-      # 2) Login to Azure using OIDC credentials created by Deployment Center
-      # NOTE: These secret names MUST match what Azure created in your repo secrets.
+      # 2) Login to Azure (OIDC)
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_2168C08F4E7D46AC99C88791B6B25452 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_21017111BCB04619ADBDA630999991E9 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_687BE5751C394407B407D3413BBCD01A }}
 
-      # 3) Deploy the downloaded published output to your Azure Web App
+      # 3) Deploy to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          # MUST match Azure App Service name EXACTLY
           app-name: "jg-maintenance-webapi-lab4-"
           slot-name: "Production"
           package: .
