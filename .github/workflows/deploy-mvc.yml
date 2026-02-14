@@ -52,6 +52,6 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           # ✅ CHANGE THIS to your MVC Azure Web App NAME (exactly)
-          app-name: "PUT-YOUR-MVC-WEBAPP-NAME-HERE"
+          app-name: "jg-carrental-mvc-lab4-"
           publish-profile: ${{ secrets.AZURE_MVC_PUBLISH_PROFILE }}
           package: publish
