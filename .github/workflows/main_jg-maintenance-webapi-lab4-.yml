@@ -1,11 +1,4 @@
-# ============================================================
-# Lab 4 - CI/CD for Maintenance.WebAPI (.NET 8) -> Azure App Service (Windows)
-# - Builds & publishes ONLY the WebAPI project
-# - Zips ONLY the publish output
-# - Deploys using Azure Publish Profile (most reliable for labs)
-# ============================================================
-
-name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4-
+name: Build & Deploy Maintenance.WebAPI (ZipDeploy via Publish Profile)
 
 on:
   push:
@@ -13,25 +6,22 @@ on:
   workflow_dispatch:
 
 env:
-  # Path to your Web API project (.csproj) relative to repo root
+  # ✅ change ONLY if your path is different
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
 
-  # Azure App Service name (must match exactly in Azure)
+  # ✅ your Azure Web App name (must match exactly)
   AZURE_WEBAPP_NAME: jg-maintenance-webapi-lab4-
 
-  # Local publish folder + zip name (created on the runner)
+  # publish output folder + zip name
   PUBLISH_DIR: publish_output
   ZIP_NAME: publish.zip
 
 jobs:
-  build:
-    name: Build & Publish Maintenance.WebAPI
+  build_and_deploy:
     runs-on: windows-latest
-    permissions:
-      contents: read  # required for checkout
 
     steps:
-      # 1) Checkout source code
+      # 1) Get code
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -41,52 +31,26 @@ jobs:
         with:
           dotnet-version: "8.x"
 
-      # 3) Restore ONLY the WebAPI project dependencies
-      - name: Restore
+      # 3) Restore ONLY the WebAPI project
+      - name: Restore dependencies
         run: dotnet restore "${{ env.PROJECT_PATH }}"
 
-      # 4) Build ONLY the WebAPI project (Release)
-      - name: Build
+      # 4) Build ONLY the WebAPI project
+      - name: Build (Release)
         run: dotnet build "${{ env.PROJECT_PATH }}" -c Release --no-restore
 
-      # 5) Publish ONLY the WebAPI project into a clean folder
-      #    This creates the correct output for Azure App Service (Windows).
-      - name: Publish
+      # 5) Publish ONLY the WebAPI project
+      - name: Publish (Release)
         run: dotnet publish "${{ env.PROJECT_PATH }}" -c Release --no-build -o "${{ env.PUBLISH_DIR }}"
 
-      # 6) Zip ONLY the publish output (this avoids OneDeploy 500 from wrong package content)
-      - name: Zip published output
+      # 6) Zip ONLY the publish output (this is the key fix)
+      - name: Zip publish output
         shell: pwsh
         run: |
           if (Test-Path "${{ env.ZIP_NAME }}") { Remove-Item "${{ env.ZIP_NAME }}" -Force }
           Compress-Archive -Path "${{ env.PUBLISH_DIR }}\*" -DestinationPath "${{ env.ZIP_NAME }}" -Force
 
-      # 7) Upload the ZIP as an artifact for the deploy job
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: webapi-package
-          path: ${{ env.ZIP_NAME }}
-
-  deploy:
-    name: Deploy to Azure App Service
-    runs-on: windows-latest
-    needs: build
-    permissions:
-      contents: read  # standard permission
-
-    steps:
-      # 1) Download the ZIP produced by the build job
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: webapi-package
-
-      # 2) Deploy ZIP to Azure App Service using Publish Profile credentials
-      #    You MUST create this GitHub secret:
-      #    Settings -> Secrets and variables -> Actions -> New repository secret
-      #    Name: AZURE_WEBAPP_PUBLISH_PROFILE
-      #    Value: (paste entire publish profile XML)
+      # 7) Deploy using Publish Profile (no OIDC / no federated token)
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
