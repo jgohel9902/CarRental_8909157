@@ -8,10 +8,6 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-# ---------------------------------------------
-# Global environment variables (paths to your .csproj files)
-# Update these if your folder names differ.
-# ---------------------------------------------
 env:
   MVC_PROJECT: CarRentalApp/CarRentalApp.csproj
   API_PROJECT: Maintenance.WebAPI/Maintenance.WebAPI.csproj
@@ -22,22 +18,16 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # ---------------------------------------------
-      # 1) Get source code from your GitHub repo
-      # ---------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ---------------------------------------------
-      # 2) Install .NET SDK (Lab uses .NET 8 runtime in Azure)
-      # ---------------------------------------------
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
       # ---------------------------------------------
-      # 3) Restore dependencies (NuGet packages) for both projects
+      # 3) Restoring dependencies (NuGet packages) for both projects
       # ---------------------------------------------
       - name: Restore MVC dependencies
         run: dotnet restore "${{ env.MVC_PROJECT }}"
@@ -46,7 +36,7 @@ jobs:
         run: dotnet restore "${{ env.API_PROJECT }}"
 
       # ---------------------------------------------
-      # 4) Build both projects in Release mode
+      # 4) Building both projects in Release mode
       # ---------------------------------------------
       - name: Build MVC (Release)
         run: dotnet build "${{ env.MVC_PROJECT }}" -c Release --no-restore
@@ -55,8 +45,8 @@ jobs:
         run: dotnet build "${{ env.API_PROJECT }}" -c Release --no-restore
 
       # ---------------------------------------------
-      # 5) Publish both projects (creates the deployable output)
-      #    We publish into separate folders so nothing overwrites.
+      # 5) Publishing both projects (creates the deployable output)
+      #    published into separate folders so nothing overwrites.
       # ---------------------------------------------
       - name: Publish MVC
         run: dotnet publish "${{ env.MVC_PROJECT }}" -c Release --no-build -o publish_mvc
@@ -64,9 +54,7 @@ jobs:
       - name: Publish WebAPI
         run: dotnet publish "${{ env.API_PROJECT }}" -c Release --no-build -o publish_api
 
-      # ---------------------------------------------
-      # 6) Zip the publish outputs (ZipDeploy requires a zip package)
-      # ---------------------------------------------
+  
       - name: Create MVC zip package
         shell: pwsh
         run: |
@@ -79,10 +67,7 @@ jobs:
           if (Test-Path "api.zip") { Remove-Item "api.zip" -Force }
           Compress-Archive -Path "publish_api\*" -DestinationPath "api.zip" -Force
 
-      # ---------------------------------------------
-      # 7) Deploy MVC using Kudu ZipDeploy (NO OneDeploy)
-      #    We extract SCM URL + username/password from the publish profile XML.
-      # ---------------------------------------------
+    
       - name: Deploy MVC to Azure (Kudu ZipDeploy)
         shell: pwsh
         env:
@@ -113,10 +98,6 @@ jobs:
 
           # Upload zip to Kudu ZipDeploy
           Invoke-RestMethod -Uri $zipDeployUrl -Headers $headers -Method POST -InFile "mvc.zip" -ContentType "application/zip"
-
-      # ---------------------------------------------
-      # 8) Deploy WebAPI using Kudu ZipDeploy (NO OneDeploy)
-      # ---------------------------------------------
       - name: Deploy WebAPI to Azure (Kudu ZipDeploy)
         shell: pwsh
         env:
