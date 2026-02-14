@@ -1,20 +1,16 @@
 # ============================================================
 # CI/CD for Maintenance.WebAPI -> Azure App Service (Windows)
-# Repo: CarRental_8909157
 # App Service name: jg-maintenance-webapi-lab4-
 #
-# What this pipeline does:
+# Steps:
 # 1) Checkout code
 # 2) Setup .NET 8
 # 3) Restore/Build/Publish ONLY the Maintenance.WebAPI project
-# 4) Zip the published output (this avoids OneDeploy folder issues)
-# 5) Login to Azure using OIDC (Federated Identity)
-# 6) Deploy the ZIP to Azure App Service
-#
-# NOTE: Secrets used here are the ones Azure created in your repo:
-# - AZUREAPPSERVICE_CLIENTID_2168C08F4E7D46AC99C88791B6B25452
-# - AZUREAPPSERVICE_TENANTID_21017111BCB04619ADBDA630999991E9
-# - AZUREAPPSERVICE_SUBSCRIPTIONID_687BE5751C394407B407D3413BBCD01A
+# 4) Zip the publish output (prevents OneDeploy folder issues)
+# 5) Upload zip as artifact
+# 6) Download artifact
+# 7) Login to Azure using OIDC (Federated Identity)
+# 8) Deploy zip to Azure App Service
 # ============================================================
 
 name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4-
@@ -26,7 +22,6 @@ on:
   workflow_dispatch:
 
 env:
-  # Path to the WebAPI csproj (relative to repo root)
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
 
 jobs:
@@ -37,7 +32,7 @@ jobs:
     steps:
       # 1) Pull your repository code onto the GitHub runner
       - name: Checkout repository
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       # 2) Install .NET 8 SDK on the runner
       - name: Setup .NET 8
@@ -53,18 +48,18 @@ jobs:
       - name: Build (Release)
         run: dotnet build ${{ env.PROJECT_PATH }} -c Release --no-restore
 
-      # 5) Publish ONLY Maintenance.WebAPI into a clean folder
+      # 5) Publish ONLY Maintenance.WebAPI into a folder
       - name: Publish (Release)
         run: dotnet publish ${{ env.PROJECT_PATH }} -c Release --no-build -o publish
 
-      # 6) Zip the publish output (prevents OneDeploy "folder deploy" failures)
+      # 6) Zip the publish output
       - name: Zip publish output
         shell: pwsh
         run: |
           if (Test-Path "maintenance-webapi.zip") { Remove-Item "maintenance-webapi.zip" -Force }
           Compress-Archive -Path "publish\*" -DestinationPath "maintenance-webapi.zip" -Force
 
-      # 7) Upload ZIP as an artifact so the deploy job can use it
+      # 7) Upload ZIP as artifact for the deploy job
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -76,19 +71,18 @@ jobs:
     runs-on: windows-latest
     needs: build
 
-    # IMPORTANT for OIDC login (Federated Credentials)
     permissions:
       id-token: write
       contents: read
 
     steps:
-      # 1) Download the ZIP artifact from the build job
+      # 1) Download the ZIP artifact
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: maintenance-webapi-zip
 
-      # 2) Login to Azure using OIDC (NO publish profile needed)
+      # 2) Login to Azure using OIDC
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
