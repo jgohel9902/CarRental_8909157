@@ -1,13 +1,12 @@
 using Maintenance.WebAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddControllers();
 
-// Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// App service (fake data)
 builder.Services.AddScoped<IRepairHistoryService, FakeRepairHistoryService>();
 
 var app = builder.Build();
@@ -16,13 +15,15 @@ app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Maintenance.WebAPI v1");
-    c.RoutePrefix = "swagger"; 
+
+    c.RoutePrefix = string.Empty;
 });
 
+app.MapGet("/swagger", () => Results.Redirect("/"));
+
+
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
