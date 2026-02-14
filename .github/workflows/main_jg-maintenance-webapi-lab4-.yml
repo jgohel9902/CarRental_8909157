@@ -1,90 +1,45 @@
-# ============================================================
-# Lab 4 - CI/CD Pipeline (Maintenance.WebAPI -> Azure App Service)
-# Repo: CarRental_8909157
-#
-# This workflow:
-#  1) Builds + publishes ONLY the Maintenance.WebAPI project
-#  2) Deploys the published output to Azure Web App
-#
-# DEPLOY AUTH METHOD:
-#  - Publish Profile stored as GitHub Secret:
-#      AZURE_WEBAPP_PUBLISH_PROFILE
-#
-# NOTE:
-#  - This avoids common OIDC/OneDeploy "CODE 500" issues.
-#  - Meets lab requirement: fully configured functioning CI/CD.
-# ============================================================
-
-name: Build & Deploy Maintenance.WebAPI to Azure Web App (jg-maintenance-webapi-lab4-)
+name: Build and Deploy Maintenance.WebAPI (Publish Profile)
 
 on:
-  # Trigger CI/CD automatically when code is pushed to main
   push:
     branches:
       - main
-
-  # Allow manual run from GitHub Actions tab
   workflow_dispatch:
 
 env:
-  # Path to your Web API project file (edit ONLY if folder differs)
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
-
-  # Folder where "dotnet publish" will output files
-  PUBLISH_DIR: ${{ github.workspace }}/publish_output
+  PUBLISH_DIR: publish_output
+  ZIP_FILE: publish_output.zip
 
 jobs:
-  build:
-    name: Build & Publish Maintenance.WebAPI
+  build-and-deploy:
     runs-on: windows-latest
 
     steps:
-      # 1) Checkout source code from your repository
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Install .NET 8 SDK on the GitHub runner
-      - name: Setup .NET 8 SDK
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: '8.0.x'
 
-      # 3) Restore NuGet dependencies for the Web API project only
-      - name: Restore dependencies
-        run: dotnet restore "${{ env.PROJECT_PATH }}"
+      - name: Restore
+        run: dotnet restore ${{ env.PROJECT_PATH }}
 
-      # 4) Build the Web API in Release mode
-      - name: Build (Release)
-        run: dotnet build "${{ env.PROJECT_PATH }}" --configuration Release --no-restore
+      - name: Build
+        run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
 
-      # 5) Publish the Web API (creates deployable output)
-      - name: Publish (Release)
-        run: dotnet publish "${{ env.PROJECT_PATH }}" --configuration Release --no-build --output "${{ env.PUBLISH_DIR }}"
+      - name: Publish
+        run: dotnet publish ${{ env.PROJECT_PATH }} --configuration Release --no-build --output ${{ env.PUBLISH_DIR }}
 
-      # 6) Upload published output so the deploy job can use it
-      - name: Upload published artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: maintenance-webapi-publish
-          path: ${{ env.PUBLISH_DIR }}
+      - name: Create ZIP package
+        shell: pwsh
+        run: Compress-Archive -Path "${{ env.PUBLISH_DIR }}\*" -DestinationPath "${{ env.ZIP_FILE }}" -Force
 
-  deploy:
-    name: Deploy to Azure App Service
-    runs-on: windows-latest
-    needs: build
-
-    steps:
-      # 1) Download the artifact from the build job
-      - name: Download published artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: maintenance-webapi-publish
-          path: ${{ github.workspace }}/publish_output
-
-      # 2) Deploy to Azure Web App using Publish Profile secret
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: jg-maintenance-webapi-lab4-
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ${{ github.workspace }}/publish_output
+          package: ${{ env.ZIP_FILE }}
