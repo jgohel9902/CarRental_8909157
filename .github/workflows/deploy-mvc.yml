@@ -1,4 +1,4 @@
-name: Deploy MVC to Azure (ZipDeploy)
+name: Deploy CarRental MVC to Azure (ZipDeploy)
 
 on:
   push:
@@ -16,17 +16,14 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # 1) Checkout
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Setup .NET 8
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
-      # 3) Restore / Build / Publish
       - name: Restore
         run: dotnet restore "${{ env.PROJECT_PATH }}"
 
@@ -36,35 +33,30 @@ jobs:
       - name: Publish
         run: dotnet publish "${{ env.PROJECT_PATH }}" -c Release --no-build -o "${{ env.PUBLISH_FOLDER }}"
 
-      # 4) Zip the publish output
       - name: Zip publish output
         shell: pwsh
         run: |
           if (Test-Path "${{ env.ZIP_NAME }}") { Remove-Item "${{ env.ZIP_NAME }}" -Force }
           Compress-Archive -Path "${{ env.PUBLISH_FOLDER }}\*" -DestinationPath "${{ env.ZIP_NAME }}"
 
-      # 5) Deploy via Kudu ZipDeploy (bypasses OneDeploy)
       - name: Deploy to Azure via Kudu ZipDeploy
         shell: pwsh
         env:
           PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_MVC }}
         run: |
-          # Save secret to file and parse XML
           $ppPath = "publishProfile.xml"
           $env:PUBLISH_PROFILE | Out-File -FilePath $ppPath -Encoding utf8
           [xml]$xml = Get-Content $ppPath
 
-          # Prefer ZipDeploy profile, otherwise fallback to MSDeploy profile host
           $zipNode = $xml.publishData.publishProfile | Where-Object { $_.publishMethod -eq "ZipDeploy" } | Select-Object -First 1
-          if (-not $zipNode) { throw "ZipDeploy publishProfile not found in secret." }
+          if (-not $zipNode) { throw "ZipDeploy publishProfile not found in secret AZURE_WEBAPP_PUBLISH_PROFILE_MVC." }
 
           $publishUrl = $zipNode.publishUrl
           $userName   = $zipNode.userName
           $userPwd    = $zipNode.userPWD
 
-          # publishUrl usually looks like: something.scm.azurewebsites.net:443
-          $host = $publishUrl.Split(":")[0]
-          $zipDeployUrl = "https://$host/api/zipdeploy"
+          $kuduHost = $publishUrl.Split(":")[0]
+          $zipDeployUrl = "https://$kuduHost/api/zipdeploy"
 
           $pair = "$userName`:$userPwd"
           $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
@@ -73,7 +65,5 @@ jobs:
           Write-Host "Deploying to: $zipDeployUrl"
           $headers = @{ Authorization = "Basic $basic" }
 
-          # Kudu ZipDeploy
           Invoke-RestMethod -Uri $zipDeployUrl -Headers $headers -Method POST -InFile "${{ env.ZIP_NAME }}" -ContentType "application/zip"
-
           Write-Host "ZipDeploy request sent successfully."
