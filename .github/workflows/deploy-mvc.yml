@@ -1,0 +1,57 @@
+name: Build & Deploy MVC (Publish Profile)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  # ✅ CHANGE THIS to your MVC project .csproj path
+  PROJECT_PATH: CarRental.MVC/CarRental.MVC.csproj
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.x"
+
+      - name: Restore
+        run: dotnet restore "${{ env.PROJECT_PATH }}"
+
+      - name: Build
+        run: dotnet build "${{ env.PROJECT_PATH }}" -c Release --no-restore
+
+      - name: Publish
+        run: dotnet publish "${{ env.PROJECT_PATH }}" -c Release --no-build -o publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mvc
+          path: publish
+
+  deploy:
+    runs-on: windows-latest
+    needs: build
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mvc
+          path: publish
+
+      - name: Deploy to Azure Web App (MVC)
+        uses: azure/webapps-deploy@v3
+        with:
+          # ✅ CHANGE THIS to your MVC Azure Web App NAME (exactly)
+          app-name: "PUT-YOUR-MVC-WEBAPP-NAME-HERE"
+          publish-profile: ${{ secrets.AZURE_MVC_PUBLISH_PROFILE }}
+          package: publish
