@@ -1,131 +1,68 @@
-# ============================================================
-# Lab 4 - CI/CD Pipeline (One workflow for BOTH MVC + Web API)
-# - Builds and deploys two .NET 8 apps to Azure App Service
-# - Uses Azure Publish Profile secrets for authentication
-# - Includes clear comments explaining each step (Lab requirement)
-# ============================================================
+name: Deploy MVC to Azure (Kudu ZipDeploy - No OneDeploy)
 
-name: Lab4 - Deploy MVC and Web API to Azure
-
-# ------------------------------------------------------------
-# Trigger rules:
-# - Runs automatically on push to main
-# - Can also be run manually from Actions tab (workflow_dispatch)
-# ------------------------------------------------------------
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
 
-# ------------------------------------------------------------
-# Global environment variables (easy to change in one place)
-# NOTE: Paths are relative to the repo root
-# ------------------------------------------------------------
 env:
-  DOTNET_VERSION: "8.x"
-
-  # MVC App
-  MVC_PROJECT_PATH: "CarRentalApp/CarRentalApp.csproj"
-  MVC_APP_NAME: "jg-carrental-mvc-lab4-"
-  MVC_PUBLISH_DIR: "publish_mvc"
-  MVC_ZIP: "mvc.zip"
-
-  # Web API App
-  API_PROJECT_PATH: "Maintenance.WebAPI/Maintenance.WebAPI.csproj"
-  API_APP_NAME: "jg-carrental-api-lab4-"
-  API_PUBLISH_DIR: "publish_api"
-  API_ZIP: "api.zip"
+  PROJECT_PATH: CarRentalApp/CarRentalApp.csproj
+  PUBLISH_FOLDER: publish_mvc
+  ZIP_NAME: mvc.zip
 
 jobs:
-  # ==========================================================
-  # JOB 1: Build + Deploy MVC
-  # ==========================================================
-  deploy-mvc:
-    name: Build & Deploy MVC
+  deploy:
     runs-on: windows-latest
-
     steps:
-      # 1) Pull the latest code from your GitHub repository
-      - name: Checkout source code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Install the .NET SDK needed to build/publish the project
-      - name: Setup .NET SDK
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: "8.x"
 
-      # 3) Restore NuGet packages (downloads dependencies)
-      - name: Restore dependencies (MVC)
-        run: dotnet restore "${{ env.MVC_PROJECT_PATH }}"
+      - name: Restore
+        run: dotnet restore "${{ env.PROJECT_PATH }}"
 
-      # 4) Build the MVC project in Release mode
-      - name: Build (MVC)
-        run: dotnet build "${{ env.MVC_PROJECT_PATH }}" -c Release --no-restore
+      - name: Build
+        run: dotnet build "${{ env.PROJECT_PATH }}" -c Release --no-restore
 
-      # 5) Publish creates the deployable output (DLLs, configs, wwwroot, etc.)
-      - name: Publish (MVC)
-        run: dotnet publish "${{ env.MVC_PROJECT_PATH }}" -c Release --no-build -o "${{ env.MVC_PUBLISH_DIR }}"
+      - name: Publish
+        run: dotnet publish "${{ env.PROJECT_PATH }}" -c Release --no-build -o "${{ env.PUBLISH_FOLDER }}"
 
-      # 6) Zip the publish folder (Azure Web App deploy works best with a zip package)
-      - name: Zip published output (MVC)
+      - name: Zip publish output
         shell: pwsh
         run: |
-          if (Test-Path "${{ env.MVC_ZIP }}") { Remove-Item "${{ env.MVC_ZIP }}" -Force }
-          Compress-Archive -Path "${{ env.MVC_PUBLISH_DIR }}\*" -DestinationPath "${{ env.MVC_ZIP }}"
+          if (Test-Path "${{ env.ZIP_NAME }}") { Remove-Item "${{ env.ZIP_NAME }}" -Force }
+          Compress-Archive -Path "${{ env.PUBLISH_FOLDER }}\*" -DestinationPath "${{ env.ZIP_NAME }}"
 
-      # 7) Deploy to Azure Web App using publish profile stored in GitHub Secrets
-      #    This is CI/CD "CD" part: it pushes build output to Azure
-      - name: Deploy to Azure Web App (MVC)
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.MVC_APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_MVC }}
-          package: ${{ env.MVC_ZIP }}
-
-  # ==========================================================
-  # JOB 2: Build + Deploy Web API
-  # - "needs: deploy-mvc" means API deploy runs AFTER MVC deploy
-  # ==========================================================
-  deploy-api:
-    name: Build & Deploy Web API
-    runs-on: windows-latest
-    needs: deploy-mvc
-
-    steps:
-      # 1) Pull the latest code from your GitHub repository
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      # 2) Install the .NET SDK needed to build/publish the project
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      # 3) Restore NuGet packages (downloads dependencies)
-      - name: Restore dependencies (Web API)
-        run: dotnet restore "${{ env.API_PROJECT_PATH }}"
-
-      # 4) Build the Web API project in Release mode
-      - name: Build (Web API)
-        run: dotnet build "${{ env.API_PROJECT_PATH }}" -c Release --no-restore
-
-      # 5) Publish creates the deployable output (DLLs, configs, etc.)
-      - name: Publish (Web API)
-        run: dotnet publish "${{ env.API_PROJECT_PATH }}" -c Release --no-build -o "${{ env.API_PUBLISH_DIR }}"
-
-      # 6) Zip the publish folder (deploy as a zip package)
-      - name: Zip published output (Web API)
+      - name: Kudu ZipDeploy (Publish Profile)
         shell: pwsh
+        env:
+          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_MVC }}
         run: |
-          if (Test-Path "${{ env.API_ZIP }}") { Remove-Item "${{ env.API_ZIP }}" -Force }
-          Compress-Archive -Path "${{ env.API_PUBLISH_DIR }}\*" -DestinationPath "${{ env.API_ZIP }}"
+          # Parse publish profile XML from secret (NOT printed)
+          $ppPath = "publishProfile.xml"
+          $env:PUBLISH_PROFILE | Out-File -FilePath $ppPath -Encoding utf8
+          [xml]$xml = Get-Content $ppPath
 
-      # 7) Deploy to Azure Web App using publish profile stored in GitHub Secrets
-      - name: Deploy to Azure Web App (Web API)
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.API_APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_API }}
-          package: ${{ env.API_ZIP }}
+          $zipNode = $xml.publishData.publishProfile | Where-Object { $_.publishMethod -eq "ZipDeploy" } | Select-Object -First 1
+          if (-not $zipNode) { throw "ZipDeploy publishProfile not found in AZURE_WEBAPP_PUBLISH_PROFILE_MVC." }
+
+          $publishUrl = $zipNode.publishUrl
+          $userName   = $zipNode.userName
+          $userPwd    = $zipNode.userPWD
+
+          $kuduHost = $publishUrl.Split(":")[0]
+          $zipDeployUrl = "https://$kuduHost/api/zipdeploy"
+
+          $pair = "$userName`:$userPwd"
+          $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
+          $basic = [Convert]::ToBase64String($bytes)
+
+          Write-Host "Deploying to: $zipDeployUrl"
+          $headers = @{ Authorization = "Basic $basic" }
+
+          Invoke-RestMethod -Uri $zipDeployUrl -Headers $headers -Method POST -InFile "${{ env.ZIP_NAME }}" -ContentType "application/zip"
+          Write-Host "✅ Deployed successfully via Kudu ZipDeploy"
