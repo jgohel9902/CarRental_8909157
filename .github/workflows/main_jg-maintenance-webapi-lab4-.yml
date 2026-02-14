@@ -1,60 +1,67 @@
 # ============================================================
-# Lab 4 - CI/CD for Maintenance.WebAPI to Azure App Service
-# - Builds and publishes ONLY the Web API project
-# - Deploys to Azure App Service using OIDC (azure/login)
-# - Fully commented to show understanding (per lab requirement)
+# Lab 4 - CI/CD Pipeline (Maintenance.WebAPI -> Azure App Service)
+# Repo: CarRental_8909157
+#
+# This workflow:
+#  1) Builds + publishes ONLY the Maintenance.WebAPI project
+#  2) Deploys the published output to Azure Web App
+#
+# DEPLOY AUTH METHOD:
+#  - Publish Profile stored as GitHub Secret:
+#      AZURE_WEBAPP_PUBLISH_PROFILE
+#
+# NOTE:
+#  - This avoids common OIDC/OneDeploy "CODE 500" issues.
+#  - Meets lab requirement: fully configured functioning CI/CD.
 # ============================================================
 
-name: Build & Deploy Maintenance.WebAPI -> Azure Web App (jg-maintenance-webapi-lab4-)
+name: Build & Deploy Maintenance.WebAPI to Azure Web App (jg-maintenance-webapi-lab4-)
 
-# Trigger pipeline on every push to main (CI/CD), and allow manual run
 on:
+  # Trigger CI/CD automatically when code is pushed to main
   push:
     branches:
       - main
+
+  # Allow manual run from GitHub Actions tab
   workflow_dispatch:
 
-# Global environment values used across jobs
 env:
-  # Path to the Web API project file relative to repository root
+  # Path to your Web API project file (edit ONLY if folder differs)
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
 
-  # Output folder for publish (GitHub runner machine)
-  PUBLISH_DIR: ${{ github.workspace }}/publish
+  # Folder where "dotnet publish" will output files
+  PUBLISH_DIR: ${{ github.workspace }}/publish_output
 
 jobs:
   build:
     name: Build & Publish Maintenance.WebAPI
     runs-on: windows-latest
 
-    # Permission required to checkout repository contents
-    permissions:
-      contents: read
-
     steps:
-      # 1) Pull the latest code from the repository
+      # 1) Checkout source code from your repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2) Install the .NET 8 SDK on the GitHub runner
+      # 2) Install .NET 8 SDK on the GitHub runner
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
-      # 3) Restore NuGet dependencies ONLY for the Web API project
+      # 3) Restore NuGet dependencies for the Web API project only
       - name: Restore dependencies
         run: dotnet restore "${{ env.PROJECT_PATH }}"
 
-      # 4) Build the Web API project in Release mode (no restore повторно)
+      # 4) Build the Web API in Release mode
       - name: Build (Release)
         run: dotnet build "${{ env.PROJECT_PATH }}" --configuration Release --no-restore
 
-      # 5) Publish the Web API project to a folder (this is what we deploy)
+      # 5) Publish the Web API (creates deployable output)
       - name: Publish (Release)
         run: dotnet publish "${{ env.PROJECT_PATH }}" --configuration Release --no-build --output "${{ env.PUBLISH_DIR }}"
 
-      # 6) Upload published output so the deploy job can download it
+      # 6) Upload published output so the deploy job can use it
       - name: Upload published artifact
         uses: actions/upload-artifact@v4
         with:
@@ -66,32 +73,18 @@ jobs:
     runs-on: windows-latest
     needs: build
 
-    # Required for OIDC federated login to Azure
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
-      # 1) Download the publish artifact created in the build job
+      # 1) Download the artifact from the build job
       - name: Download published artifact
         uses: actions/download-artifact@v4
         with:
           name: maintenance-webapi-publish
-          path: ${{ github.workspace }}/publish
+          path: ${{ github.workspace }}/publish_output
 
-      # 2) Login to Azure using OIDC (no password / no publish profile)
-      # IMPORTANT: These secret names MUST match your GitHub repo secrets list.
-      - name: Azure Login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_2168C08F4E7D46AC99C88791B6B25452 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_21017111BCB04619ADBDA630999991E9 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_687BE5751C394407B407D3413BBCD01A }}
-
-      # 3) Deploy the published folder to your Azure Web App
+      # 2) Deploy to Azure Web App using Publish Profile secret
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: jg-maintenance-webapi-lab4-
-          slot-name: Production
-          package: ${{ github.workspace }}/publish
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ${{ github.workspace }}/publish_output
