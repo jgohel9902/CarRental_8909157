@@ -51,5 +51,5 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: "jg-carrental-mvc-lab4-"
-          publish-profile: ${{ secrets.AZURE_MVC_PUBLISH_PROFILE }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_MVC }}
           package: publish
