@@ -1,0 +1,69 @@
+name: Deploy CarRental WebAPI to Azure (ZipDeploy)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  APP_NAME: jg-carrental-api-lab4-
+  PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
+  PUBLISH_FOLDER: publish_api
+  ZIP_NAME: api.zip
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.x"
+
+      - name: Restore
+        run: dotnet restore "${{ env.PROJECT_PATH }}"
+
+      - name: Build
+        run: dotnet build "${{ env.PROJECT_PATH }}" -c Release --no-restore
+
+      - name: Publish
+        run: dotnet publish "${{ env.PROJECT_PATH }}" -c Release --no-build -o "${{ env.PUBLISH_FOLDER }}"
+
+      - name: Zip publish output
+        shell: pwsh
+        run: |
+          if (Test-Path "${{ env.ZIP_NAME }}") { Remove-Item "${{ env.ZIP_NAME }}" -Force }
+          Compress-Archive -Path "${{ env.PUBLISH_FOLDER }}\*" -DestinationPath "${{ env.ZIP_NAME }}"
+
+      - name: Deploy to Azure via Kudu ZipDeploy
+        shell: pwsh
+        env:
+          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_API }}
+        run: |
+          $ppPath = "publishProfile.xml"
+          $env:PUBLISH_PROFILE | Out-File -FilePath $ppPath -Encoding utf8
+          [xml]$xml = Get-Content $ppPath
+
+          $zipNode = $xml.publishData.publishProfile | Where-Object { $_.publishMethod -eq "ZipDeploy" } | Select-Object -First 1
+          if (-not $zipNode) { throw "ZipDeploy publishProfile not found in secret AZURE_WEBAPP_PUBLISH_PROFILE_API." }
+
+          $publishUrl = $zipNode.publishUrl
+          $userName   = $zipNode.userName
+          $userPwd    = $zipNode.userPWD
+
+          $kuduHost = $publishUrl.Split(":")[0]
+          $zipDeployUrl = "https://$kuduHost/api/zipdeploy"
+
+          $pair = "$userName`:$userPwd"
+          $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
+          $basic = [Convert]::ToBase64String($bytes)
+
+          Write-Host "Deploying to: $zipDeployUrl"
+          $headers = @{ Authorization = "Basic $basic" }
+
+          Invoke-RestMethod -Uri $zipDeployUrl -Headers $headers -Method POST -InFile "${{ env.ZIP_NAME }}" -ContentType "application/zip"
+          Write-Host "ZipDeploy request sent successfully."
