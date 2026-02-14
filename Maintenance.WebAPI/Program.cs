@@ -1,22 +1,23 @@
 using Maintenance.WebAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
-
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
+// Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// App service (fake data)
 builder.Services.AddScoped<IRepairHistoryService, FakeRepairHistoryService>();
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Maintenance.WebAPI v1");
+    c.RoutePrefix = "swagger"; 
+});
 
 app.UseHttpsRedirection();
 
