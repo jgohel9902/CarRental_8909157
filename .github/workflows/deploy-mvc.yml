@@ -1,4 +1,4 @@
-name: Build & Deploy CarRental MVC (Publish Profile)
+name: Deploy MVC to Azure (ZipDeploy)
 
 on:
   push:
@@ -6,21 +6,27 @@ on:
   workflow_dispatch:
 
 env:
+  APP_NAME: jg-carrental-mvc-lab4-
   PROJECT_PATH: CarRentalApp/CarRentalApp.csproj
+  PUBLISH_FOLDER: publish_mvc
+  ZIP_NAME: mvc.zip
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: windows-latest
 
     steps:
+      # 1) Checkout
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 2) Setup .NET 8
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
+      # 3) Restore / Build / Publish
       - name: Restore
         run: dotnet restore "${{ env.PROJECT_PATH }}"
 
@@ -28,28 +34,46 @@ jobs:
         run: dotnet build "${{ env.PROJECT_PATH }}" -c Release --no-restore
 
       - name: Publish
-        run: dotnet publish "${{ env.PROJECT_PATH }}" -c Release --no-build -o publish
+        run: dotnet publish "${{ env.PROJECT_PATH }}" -c Release --no-build -o "${{ env.PUBLISH_FOLDER }}"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mvc
-          path: publish
+      # 4) Zip the publish output
+      - name: Zip publish output
+        shell: pwsh
+        run: |
+          if (Test-Path "${{ env.ZIP_NAME }}") { Remove-Item "${{ env.ZIP_NAME }}" -Force }
+          Compress-Archive -Path "${{ env.PUBLISH_FOLDER }}\*" -DestinationPath "${{ env.ZIP_NAME }}"
 
-  deploy:
-    runs-on: windows-latest
-    needs: build
+      # 5) Deploy via Kudu ZipDeploy (bypasses OneDeploy)
+      - name: Deploy to Azure via Kudu ZipDeploy
+        shell: pwsh
+        env:
+          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_MVC }}
+        run: |
+          # Save secret to file and parse XML
+          $ppPath = "publishProfile.xml"
+          $env:PUBLISH_PROFILE | Out-File -FilePath $ppPath -Encoding utf8
+          [xml]$xml = Get-Content $ppPath
 
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mvc
-          path: publish
+          # Prefer ZipDeploy profile, otherwise fallback to MSDeploy profile host
+          $zipNode = $xml.publishData.publishProfile | Where-Object { $_.publishMethod -eq "ZipDeploy" } | Select-Object -First 1
+          if (-not $zipNode) { throw "ZipDeploy publishProfile not found in secret." }
 
-      - name: Deploy to Azure Web App (MVC)
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: "jg-carrental-mvc-lab4-"
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_MVC }}
-          package: publish
+          $publishUrl = $zipNode.publishUrl
+          $userName   = $zipNode.userName
+          $userPwd    = $zipNode.userPWD
+
+          # publishUrl usually looks like: something.scm.azurewebsites.net:443
+          $host = $publishUrl.Split(":")[0]
+          $zipDeployUrl = "https://$host/api/zipdeploy"
+
+          $pair = "$userName`:$userPwd"
+          $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
+          $basic = [Convert]::ToBase64String($bytes)
+
+          Write-Host "Deploying to: $zipDeployUrl"
+          $headers = @{ Authorization = "Basic $basic" }
+
+          # Kudu ZipDeploy
+          Invoke-RestMethod -Uri $zipDeployUrl -Headers $headers -Method POST -InFile "${{ env.ZIP_NAME }}" -ContentType "application/zip"
+
+          Write-Host "ZipDeploy request sent successfully."
