@@ -1,4 +1,21 @@
-
+# ============================================================
+# CI/CD for Maintenance.WebAPI -> Azure App Service (Windows)
+# Repo: CarRental_8909157
+# App Service name: jg-maintenance-webapi-lab4-
+#
+# What this pipeline does:
+# 1) Checkout code
+# 2) Setup .NET 8
+# 3) Restore/Build/Publish ONLY the Maintenance.WebAPI project
+# 4) Zip the published output (this avoids OneDeploy folder issues)
+# 5) Login to Azure using OIDC (Federated Identity)
+# 6) Deploy the ZIP to Azure App Service
+#
+# NOTE: Secrets used here are the ones Azure created in your repo:
+# - AZUREAPPSERVICE_CLIENTID_2168C08F4E7D46AC99C88791B6B25452
+# - AZUREAPPSERVICE_TENANTID_21017111BCB04619ADBDA630999991E9
+# - AZUREAPPSERVICE_SUBSCRIPTIONID_687BE5751C394407B407D3413BBCD01A
+# ============================================================
 
 name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4-
 
@@ -6,14 +23,11 @@ on:
   push:
     branches:
       - main
-
   workflow_dispatch:
 
 env:
+  # Path to the WebAPI csproj (relative to repo root)
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
-  PUBLISH_DIR: publish
-
-  PACKAGE_ZIP: maintenance-webapi.zip
 
 jobs:
   build:
@@ -21,61 +35,71 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      # 1) Pull your repository code onto the GitHub runner
       - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up .NET 8 SDK
+      # 2) Install .NET 8 SDK on the runner
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
-      - name: Restore dependencies
-        run: dotnet restore "${{ env.PROJECT_PATH }}"
+      # 3) Restore NuGet packages ONLY for Maintenance.WebAPI
+      - name: Restore packages
+        run: dotnet restore ${{ env.PROJECT_PATH }}
 
+      # 4) Build ONLY Maintenance.WebAPI (Release)
       - name: Build (Release)
-        run: dotnet build "${{ env.PROJECT_PATH }}" --configuration Release --no-restore
+        run: dotnet build ${{ env.PROJECT_PATH }} -c Release --no-restore
 
-      - name: Publish
-        run: dotnet publish "${{ env.PROJECT_PATH }}" --configuration Release --no-build -o "${{ env.PUBLISH_DIR }}"
-        
+      # 5) Publish ONLY Maintenance.WebAPI into a clean folder
+      - name: Publish (Release)
+        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release --no-build -o publish
+
+      # 6) Zip the publish output (prevents OneDeploy "folder deploy" failures)
       - name: Zip publish output
         shell: pwsh
         run: |
-          if (Test-Path "${{ env.PACKAGE_ZIP }}") { Remove-Item "${{ env.PACKAGE_ZIP }}" -Force }
-          Compress-Archive -Path "${{ env.PUBLISH_DIR }}\*" -DestinationPath "${{ env.PACKAGE_ZIP }}"
+          if (Test-Path "maintenance-webapi.zip") { Remove-Item "maintenance-webapi.zip" -Force }
+          Compress-Archive -Path "publish\*" -DestinationPath "maintenance-webapi.zip" -Force
 
+      # 7) Upload ZIP as an artifact so the deploy job can use it
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: maintenance-webapi-package
-          path: ${{ env.PACKAGE_ZIP }}
+          name: maintenance-webapi-zip
+          path: maintenance-webapi.zip
 
   deploy:
     name: Deploy to Azure App Service
     runs-on: windows-latest
     needs: build
-    
+
+    # IMPORTANT for OIDC login (Federated Credentials)
     permissions:
       id-token: write
       contents: read
 
     steps:
+      # 1) Download the ZIP artifact from the build job
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: maintenance-webapi-package
-          path: .
+          name: maintenance-webapi-zip
 
-      - name: Azure Login (OIDC)
+      # 2) Login to Azure using OIDC (NO publish profile needed)
+      - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_2168C08F4E7D46AC99C88791B6B25452 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_21017111BCB04619ADBDA630999991E9 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_687BE5751C394407B407D3413BBCD01A }}
 
+      # 3) Deploy the ZIP to your Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: "jg-maintenance-webapi-lab4-"
-          slot-name: "Production"
-          package: "./${{ env.PACKAGE_ZIP }}"
+          app-name: jg-maintenance-webapi-lab4-
+          slot-name: Production
+          package: maintenance-webapi.zip
