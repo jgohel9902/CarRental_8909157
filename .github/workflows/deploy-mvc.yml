@@ -7,18 +7,16 @@ on:
 
 env:
   PROJECT_PATH: CarRentalApp/CarRentalApp.csproj
-  ZIP_PATH: mvc.zip
   APP_NAME: jg-carrental-mvc-lab4-
+  ZIP_PATH: mvc.zip
 
 jobs:
   build-and-deploy:
     runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
@@ -31,13 +29,13 @@ jobs:
       - name: Publish
         run: dotnet publish "${{ env.PROJECT_PATH }}" -c Release --no-build -o publish_mvc
 
-      - name: Zip publish output
+      - name: Zip output
         shell: pwsh
         run: |
           if (Test-Path "${{ env.ZIP_PATH }}") { Remove-Item "${{ env.ZIP_PATH }}" -Force }
           Compress-Archive -Path "publish_mvc\*" -DestinationPath "${{ env.ZIP_PATH }}"
 
-      - name: Deploy to Azure Web App (MVC)
+      - name: Deploy
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.APP_NAME }}
