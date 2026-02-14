@@ -1,99 +1,97 @@
 # ============================================================
-# CI/CD for Maintenance.WebAPI -> Azure App Service (Windows)
-# App Service name: jg-maintenance-webapi-lab4-
-#
-# Steps:
-# 1) Checkout code
-# 2) Setup .NET 8
-# 3) Restore/Build/Publish ONLY the Maintenance.WebAPI project
-# 4) Zip the publish output (prevents OneDeploy folder issues)
-# 5) Upload zip as artifact
-# 6) Download artifact
-# 7) Login to Azure using OIDC (Federated Identity)
-# 8) Deploy zip to Azure App Service
+# Lab 4 - CI/CD for Maintenance.WebAPI to Azure App Service
+# - Builds and publishes ONLY the Web API project
+# - Deploys to Azure App Service using OIDC (azure/login)
+# - Fully commented to show understanding (per lab requirement)
 # ============================================================
 
-name: Build and deploy Maintenance.WebAPI to Azure Web App - jg-maintenance-webapi-lab4-
+name: Build & Deploy Maintenance.WebAPI -> Azure Web App (jg-maintenance-webapi-lab4-)
 
+# Trigger pipeline on every push to main (CI/CD), and allow manual run
 on:
   push:
     branches:
       - main
   workflow_dispatch:
 
+# Global environment values used across jobs
 env:
+  # Path to the Web API project file relative to repository root
   PROJECT_PATH: Maintenance.WebAPI/Maintenance.WebAPI.csproj
+
+  # Output folder for publish (GitHub runner machine)
+  PUBLISH_DIR: ${{ github.workspace }}/publish
 
 jobs:
   build:
     name: Build & Publish Maintenance.WebAPI
     runs-on: windows-latest
 
+    # Permission required to checkout repository contents
+    permissions:
+      contents: read
+
     steps:
-      # 1) Pull your repository code onto the GitHub runner
+      # 1) Pull the latest code from the repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2) Install .NET 8 SDK on the runner
-      - name: Setup .NET 8
+      # 2) Install the .NET 8 SDK on the GitHub runner
+      - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.x"
+          dotnet-version: "8.0.x"
 
-      # 3) Restore NuGet packages ONLY for Maintenance.WebAPI
-      - name: Restore packages
-        run: dotnet restore ${{ env.PROJECT_PATH }}
+      # 3) Restore NuGet dependencies ONLY for the Web API project
+      - name: Restore dependencies
+        run: dotnet restore "${{ env.PROJECT_PATH }}"
 
-      # 4) Build ONLY Maintenance.WebAPI (Release)
+      # 4) Build the Web API project in Release mode (no restore повторно)
       - name: Build (Release)
-        run: dotnet build ${{ env.PROJECT_PATH }} -c Release --no-restore
+        run: dotnet build "${{ env.PROJECT_PATH }}" --configuration Release --no-restore
 
-      # 5) Publish ONLY Maintenance.WebAPI into a folder
+      # 5) Publish the Web API project to a folder (this is what we deploy)
       - name: Publish (Release)
-        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release --no-build -o publish
+        run: dotnet publish "${{ env.PROJECT_PATH }}" --configuration Release --no-build --output "${{ env.PUBLISH_DIR }}"
 
-      # 6) Zip the publish output
-      - name: Zip publish output
-        shell: pwsh
-        run: |
-          if (Test-Path "maintenance-webapi.zip") { Remove-Item "maintenance-webapi.zip" -Force }
-          Compress-Archive -Path "publish\*" -DestinationPath "maintenance-webapi.zip" -Force
-
-      # 7) Upload ZIP as artifact for the deploy job
-      - name: Upload artifact
+      # 6) Upload published output so the deploy job can download it
+      - name: Upload published artifact
         uses: actions/upload-artifact@v4
         with:
-          name: maintenance-webapi-zip
-          path: maintenance-webapi.zip
+          name: maintenance-webapi-publish
+          path: ${{ env.PUBLISH_DIR }}
 
   deploy:
     name: Deploy to Azure App Service
     runs-on: windows-latest
     needs: build
 
+    # Required for OIDC federated login to Azure
     permissions:
       id-token: write
       contents: read
 
     steps:
-      # 1) Download the ZIP artifact
-      - name: Download artifact
+      # 1) Download the publish artifact created in the build job
+      - name: Download published artifact
         uses: actions/download-artifact@v4
         with:
-          name: maintenance-webapi-zip
+          name: maintenance-webapi-publish
+          path: ${{ github.workspace }}/publish
 
-      # 2) Login to Azure using OIDC
-      - name: Azure login (OIDC)
+      # 2) Login to Azure using OIDC (no password / no publish profile)
+      # IMPORTANT: These secret names MUST match your GitHub repo secrets list.
+      - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_2168C08F4E7D46AC99C88791B6B25452 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_21017111BCB04619ADBDA630999991E9 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_687BE5751C394407B407D3413BBCD01A }}
 
-      # 3) Deploy the ZIP to your Web App
+      # 3) Deploy the published folder to your Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: jg-maintenance-webapi-lab4-
           slot-name: Production
-          package: maintenance-webapi.zip
+          package: ${{ github.workspace }}/publish
