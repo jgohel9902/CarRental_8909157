@@ -18,13 +18,10 @@ namespace CarRentalApp.Controllers
         {
             var client = _httpClientFactory.CreateClient("CustomerApi");
 
-            // Your API route is /api/customer
             var customers = await client.GetFromJsonAsync<List<CustomerDto>>("/api/customer");
 
             return View(customers ?? new List<CustomerDto>());
         }
-
-        // Optional: details page later
         public async Task<IActionResult> Details(int id)
         {
             var client = _httpClientFactory.CreateClient("CustomerApi");
