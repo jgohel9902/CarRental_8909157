@@ -1,32 +1,54 @@
 ﻿using Maintenance.WebAPI.Models;
 
-namespace Maintenance.WebAPI.Services
+namespace Maintenance.WebAPI.Services;
+
+public class FakeRepairHistoryService : IRepairHistoryService
 {
-    public class FakeRepairHistoryService : IRepairHistoryService
+    // Simple in-memory storage (stateful while the app is running)
+    private static readonly List<RepairHistoryDto> _repairs = new();
+    private static int _nextId = 1;
+
+    public FakeRepairHistoryService()
     {
-        public List<RepairHistoryDto> GetByVehicleId(int vehicleId)
+        // Seed once
+        if (_repairs.Count == 0)
         {
-            return new List<RepairHistoryDto>
+            _repairs.Add(new RepairHistoryDto
             {
-                new RepairHistoryDto
-                {
-                    Id = 1,
-                    VehicleId = vehicleId,
-                    RepairDate = DateTime.Now.AddDays(-10),
-                    Description = "Oil change",
-                    Cost = 89.99m,
-                    PerformedBy = "Quick Lube"
-                },
-                new RepairHistoryDto
-                {
-                    Id = 2,
-                    VehicleId = vehicleId,
-                    RepairDate = DateTime.Now.AddDays(-40),
-                    Description = "Brake pad replacement",
-                    Cost = 350.00m,
-                    PerformedBy = "Auto Repair Pro"
-                }
-            };
+                Id = _nextId++,
+                VehicleId = 101,
+                RepairDate = DateTime.Now.AddDays(-10),
+                Description = "Oil change",
+                Cost = 89.99m,
+                PerformedBy = "Quick Lube"
+            });
+
+            _repairs.Add(new RepairHistoryDto
+            {
+                Id = _nextId++,
+                VehicleId = 101,
+                RepairDate = DateTime.Now.AddDays(-3),
+                Description = "Brake inspection",
+                Cost = 59.99m,
+                PerformedBy = "City Garage"
+            });
         }
+    }
+
+    public List<RepairHistoryDto> GetByVehicleId(int vehicleId)
+    {
+        return _repairs
+            .Where(r => r.VehicleId == vehicleId)
+            .OrderByDescending(r => r.RepairDate)
+            .ToList();
+    }
+
+    public RepairHistoryDto AddRepair(RepairHistoryDto repair)
+    {
+        repair.Id = _nextId++;
+        if (repair.RepairDate == default) repair.RepairDate = DateTime.Now;
+
+        _repairs.Add(repair);
+        return repair;
     }
 }
