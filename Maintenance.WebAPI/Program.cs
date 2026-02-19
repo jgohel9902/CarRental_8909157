@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// ✅ Swagger + API Key support
+//  Swagger + API Key support
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
@@ -41,13 +41,13 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddScoped<IRepairHistoryService, FakeRepairHistoryService>();
 
-// ✅ Stateful behavior
+// Stateful behavior
 var usageCounts = new Dictionary<string, int>();
 builder.Services.AddSingleton(usageCounts);
 
 var app = builder.Build();
 
-// ✅ Global exception handling middleware (must be first)
+// Global exception handling middleware
 app.Use(async (context, next) =>
 {
     try
@@ -67,7 +67,7 @@ app.Use(async (context, next) =>
     }
 });
 
-// ✅ Swagger
+// Swagger
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -75,7 +75,7 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty; // Swagger at /
 });
 
-// ✅ API Key middleware (allow swagger/static, protect API endpoints)
+// API Key middleware 
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value?.ToLower() ?? "";
