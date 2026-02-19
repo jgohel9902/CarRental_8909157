@@ -9,32 +9,32 @@ builder.Services.AddEndpointsApiExplorer();
 // ✅ Swagger + API Key support
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
     {
         Title = "Maintenance.WebAPI",
         Version = "v1"
     });
 
-    options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    options.AddSecurityDefinition("ApiKey", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
-        Description = "Enter API Key (header name: X-Api-Key). Example: MY_SECRET_KEY_123",
-        In = ParameterLocation.Header,
+        Description = "Enter API Key (X-Api-Key)",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
         Name = "X-Api-Key",
-        Type = SecuritySchemeType.ApiKey
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey
     });
 
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
                 {
-                    Type = ReferenceType.SecurityScheme,
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
                     Id = "ApiKey"
                 }
             },
-            Array.Empty<string>()
+            new string[] {}
         }
     });
 });
