@@ -1,0 +1,15 @@
+﻿@{
+    ViewData["Title"] = "API Usage";
+}
+
+<h2>API Usage (Stateful Count)</h2>
+
+@if (ViewBag.Error != null)
+{
+    <div class="alert alert-danger">@ViewBag.Error</div>
+}
+else
+{
+    <p>Refresh this page to see the callCount increase.</p>
+    <pre>@ViewBag.Json</pre>
+}

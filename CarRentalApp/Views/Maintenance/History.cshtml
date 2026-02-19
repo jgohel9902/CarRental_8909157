@@ -1,4 +1,8 @@
-﻿@model List<CarRentalApp.Models.RepairHistoryViewModel>
+﻿@if (ViewBag.Error != null)
+{
+    <div class="alert alert-danger">@ViewBag.Error</div>
+}
+@model List<CarRentalApp.Models.RepairHistoryViewModel>
 
 @{
     ViewData["Title"] = "Vehicle Repair History";
